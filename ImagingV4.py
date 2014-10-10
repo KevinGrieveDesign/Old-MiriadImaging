@@ -37,6 +37,8 @@ ImagingDetails['PositionAngle'] = ""
 
 ImagingDetails['SourcePath'] = "SourceTest"
 ImagingDetails['DestinationPath'] = "DestinationTest"
+ImagingDetails['DestinationLink'] = "i"
+
 ImagingDetails['Images'] = ["pnt_1","pnt_2"]
 
 #================= Invert =================
@@ -100,7 +102,7 @@ def UVaver(Image, ImagingDetails):
 
 	Task = "Uvaver "
 	Task = Task + " vis='" + str(ImagingDetails['SourcePath']) + "/" + str(Image) + "'"
-	Task = Task + " out='" + ImagingDetails['DestinationPath'] + "/" + str(Out) + "'"
+	Task = Task + " out='" + ImagingDetails['DestinationLink'] + "/" + str(Out) + "'"
 
 	print Task
 	ProcList.append(Popen(Task, shell=True))
@@ -110,6 +112,7 @@ def Invert(Image, ImagingDetails):
 	UVaver = str(Image) + ".uvaver." + str(ImagingDetails['RoundNum'])
 	Map = str(Image) + ".map." + str(ImagingDetails['RoundNum'])
 	Beam = str(Image) + ".beam." + str(ImagingDetails['RoundNum'])
+	LogFile = str(Image) + ".invertlog." + str(ImagingDetails['RoundNum'])
 
 	Task = "Invert "
 	Task = Task + " vis='" + UVaver + "'"
@@ -123,6 +126,7 @@ def Invert(Image, ImagingDetails):
 	Task = Task + " cell='" + str(ImagingDetails['Cell']) + "'"
 	Task = Task + " stokes='" + str(ImagingDetails['Stokes']) + "'"
 	Task = Task + " options='" + str(ImagingDetails['InvertOptions']) + "'"
+	Task = Task + " > " + LogFile
 	
 	print Task
 	ProcList.append(Popen(Task, shell=True))
@@ -132,19 +136,30 @@ def MFClean(Image, ImagingDetails, SelfCalBool):
 	Map = str(Image) + ".map." + str(ImagingDetails['RoundNum'])
 	Beam = str(Image) + ".beam." + str(ImagingDetails['RoundNum'])
 	Model = str(Image) + ".model." + str(ImagingDetails['RoundNum'])
+	LogFile = str(Image) + ".invertlog." + str(ImagingDetails['RoundNum'])
+	
+	TheoreticalRMS = ""
+	TheoreticalRMSArray = []
+
+	LogFileArray = open(LogFile)
+
+	for LogFileLine in LogFileArray:
+		if "Theoretical" in LogFileLine:
+			TheoreticalRMSArray = LogFileLine.split(" ")
+			TheoreticalRMS = TheoreticalRMSArray[3]
 	
 	Task = "mfclean "
 	Task = Task + " map='" + Map + "'"
 	Task = Task + " beam='" + Beam + "'"
 	Task = Task + " out='" + Model + "'"
+	Task = Task + " region='" + ImagingDetails['CleanRegion'] + "'"
 
 	if SelfCalBool == True:
 		Task = Task + " niters='" + str(ImagingDetails['SelfCalIterations']) + "'"
+		Task = Task + " cutoff='" + str(float(ImagingDetails['SelfCalSigma']) * float(TheoreticalRMS)) + "'"
 	else:
 		Task = Task + " niters='" + str(ImagingDetails['Iterations']) + "'"
-
-	#Task = Task + " cutoff='" + iCutoff + "'"
-	Task = Task + " region='" + ImagingDetails['CleanRegion'] + "'"
+		Task = Task + " cutoff='" + str(float(ImagingDetails['Sigma']) * float(TheoreticalRMS)) + "'"
 
 	print Task
 	ProcList.append(Popen(Task, shell=True))				
@@ -197,10 +212,10 @@ def Restor(Image, ImagingDetails):
 
 #Run the task Linmos
 def Linmos(ImagingDetails):
-	Linmos = ImagingDetails['DestinationPath'] + "/" + str(ImagingDetails['ProjectNum']) + ".pbcorr"
+	Linmos = ImagingDetails['DestinationLink'] + "/" + str(ImagingDetails['ProjectNum']) + ".pbcorr"
 
 	Task = "linmos "
-	Task = Task + " in='" + ImagingDetails['DestinationPath'] + "/*restor*'"
+	Task = Task + " in='" + ImagingDetails['DestinationLink'] + "/*restor*'"
 	Task = Task + " out='" + Linmos + "'"
 	Task = Task + " bw='" + str(ImagingDetails['Bandwidth']) + "'"
 
@@ -228,7 +243,7 @@ def StandardCabbImaging(ImagingDetails):
 
 		#===============Run Invert==================
 		for ImageName in ImagingDetails['Images']:
-			ImageName = ImagingDetails['DestinationPath'] + "/" + ImageName
+			ImageName = ImagingDetails['DestinationLink'] + "/" + ImageName
 			CheckProc(ImagingDetails['MaxProcesses'])
 			Invert(ImageName + "." + str(ImagingDetails['Frequency']), ImagingDetails);
 		CheckProc(0)
@@ -236,7 +251,7 @@ def StandardCabbImaging(ImagingDetails):
 
 		#===============Run MFClean==================
 		for ImageName in ImagingDetails['Images']:
-			ImageName = ImagingDetails['DestinationPath'] + "/" + ImageName
+			ImageName = ImagingDetails['DestinationLink'] + "/" + ImageName
 			CheckProc(ImagingDetails['MaxProcesses'])
 			MFClean(ImageName + "." + str(ImagingDetails['Frequency']), ImagingDetails, True);
 		CheckProc(0)
@@ -244,14 +259,14 @@ def StandardCabbImaging(ImagingDetails):
 
 		#===============Run SelfCal==================
 		for ImageName in ImagingDetails['Images']:
-			ImageName = ImagingDetails['DestinationPath'] + "/" + ImageName
+			ImageName = ImagingDetails['DestinationLink'] + "/" + ImageName
 			CheckProc(ImagingDetails['MaxProcesses'])
 			SelfCal(ImageName + "." + str(ImagingDetails['Frequency']), ImagingDetails);
 		CheckProc(0)
 
 		#===============Run UVaver to apply SelfCal==================
 		for ImageName in ImagingDetails['Images']:
-			ImageName = ImagingDetails['DestinationPath'] + "/" + ImageName
+			ImageName = ImagingDetails['DestinationLink'] + "/" + ImageName
 			CheckProc(ImagingDetails['MaxProcesses'])
 			UVaverSelfCal(ImageName + "." + str(ImagingDetails['Frequency']), ImagingDetails);
 		CheckProc(0)
@@ -265,7 +280,7 @@ def StandardCabbImaging(ImagingDetails):
 
 	#===============Run Invert==================
 	for ImageName in ImagingDetails['Images']:
-		ImageName = ImagingDetails['DestinationPath'] + "/" + ImageName
+		ImageName = ImagingDetails['DestinationLink'] + "/" + ImageName
 		CheckProc(ImagingDetails['MaxProcesses'])
 		Invert(ImageName + "." + str(ImagingDetails['Frequency']), ImagingDetails);
 	CheckProc(0)
@@ -273,14 +288,14 @@ def StandardCabbImaging(ImagingDetails):
 
 	#===============Run MFClean==================
 	for ImageName in ImagingDetails['Images']:
-		ImageName = ImagingDetails['DestinationPath'] + "/" + ImageName
+		ImageName = ImagingDetails['DestinationLink'] + "/" + ImageName
 		CheckProc(ImagingDetails['MaxProcesses'])
 		MFClean(ImageName + "." + str(ImagingDetails['Frequency']), ImagingDetails, False);
 	CheckProc(0)
 
 	#===============Run Restor==================
 	for ImageName in ImagingDetails['Images']:
-		ImageName = ImagingDetails['DestinationPath'] + "/" + ImageName
+		ImageName = ImagingDetails['DestinationLink'] + "/" + ImageName
 		CheckProc(ImagingDetails['MaxProcesses'])
 		Restor(ImageName + "." + str(ImagingDetails['Frequency']), ImagingDetails);
 	CheckProc(0)
@@ -292,7 +307,11 @@ def StandardCabbImaging(ImagingDetails):
 
 
 
+if ReadFolder(ImagingDetails['DestinationPath']) == False:
+	os.system("mkdir " + ImagingDetails['DestinationPath'])
 
+if ReadFolder(ImagingDetails['DestinationLink']) == False:
+	os.system("ln -s " + ImagingDetails['DestinationPath'] + "/ " + ImagingDetails['DestinationLink'])
 
 ImagingDetails['MaxProcesses'] -= 1
 
@@ -302,9 +321,11 @@ if TaskSet == 1:
 
 CheckProc(0);
 
+os.system("rm " + ImagingDetails['DestinationLink'])
 
 print(      "\n\n\n\n+======================Finished======================+\n"       )
-print("|            Time Taken = " + str(datetime.now()-startTime) + "             |")
+print("|            Time Taken    = " + str(datetime.now()) + "             |")
+print("|            Time Finished = " + str(datetime.now()-startTime) + "             |")
 print(            "\n+====================================================+\n"       )
 
 
